@@ -36,6 +36,7 @@ import io.element.android.features.messages.impl.crypto.identity.IdentityChangeS
 import io.element.android.features.messages.impl.link.LinkState
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerEvent
 import io.element.android.features.messages.impl.messagecomposer.MessageComposerState
+import io.element.android.features.messages.impl.messagecomposer.PersonalStickerStore
 import io.element.android.features.messages.impl.pinned.banner.PinnedMessagesBannerState
 import io.element.android.features.messages.impl.timeline.MarkAsFullyRead
 import io.element.android.features.messages.impl.timeline.SelectionAction
@@ -53,15 +54,18 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemEncryptedContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemEventContentWithAttachment
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemGalleryContent
+import io.element.android.features.messages.impl.timeline.model.event.TimelineItemImageContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemLegacyCallInviteContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemLocationContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemPollContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemRedactedContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemRtcNotificationContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStateContent
+import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStickerContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemTextBasedContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemUnknownContent
 import io.element.android.features.messages.impl.timeline.model.event.captionOrNull
+import io.element.android.features.messages.impl.timeline.model.event.copyableText
 import io.element.android.features.messages.impl.timeline.model.event.htmlCaptionOrNull
 import io.element.android.features.messages.impl.timeline.protection.TimelineProtectionState
 import io.element.android.features.messages.impl.timeline.selectedEventIdsInTimelineOrder
@@ -85,6 +89,7 @@ import io.element.android.libraries.designsystem.utils.snackbar.collectSnackbarM
 import io.element.android.libraries.di.annotations.SessionCoroutineScope
 import io.element.android.libraries.emoji.api.recentemojis.AddRecentEmoji
 import io.element.android.libraries.featureflag.api.FeatureFlagService
+import io.element.android.libraries.matrix.api.media.ImageInfo
 import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.matrix.api.core.toThreadId
 import io.element.android.libraries.matrix.api.encryption.EncryptionService
@@ -134,6 +139,7 @@ class MessagesPresenter(
     private val roomCallStatePresenter: Presenter<RoomCallState>,
     private val roomMemberModerationPresenter: Presenter<RoomMemberModerationState>,
     private val snackbarDispatcher: SnackbarDispatcher,
+    private val personalStickers: PersonalStickerStore,
     private val dispatchers: CoroutineDispatchers,
     private val clipboardHelper: ClipboardHelper,
     private val htmlConverterProvider: HtmlConverterProvider,
@@ -417,6 +423,7 @@ class MessagesPresenter(
         when (action) {
             TimelineItemAction.CopyText -> handleCopyContents(targetEvent)
             TimelineItemAction.CopyCaption -> handleCopyCaption(targetEvent)
+            TimelineItemAction.SaveAsSticker -> handleSaveAsSticker(targetEvent)
             TimelineItemAction.CopyLink -> handleCopyLink(targetEvent)
             TimelineItemAction.Redact -> handleActionRedact(targetEvent, redactEventAction)
             TimelineItemAction.Edit,
@@ -684,7 +691,7 @@ class MessagesPresenter(
 
     private fun handleCopyContents(event: TimelineItem.Event) {
         val content = when (event.content) {
-            is TimelineItemTextBasedContent -> event.content.body
+            is TimelineItemTextBasedContent -> event.content.copyableText()
             is TimelineItemStateContent -> event.content.body
             is TimelineItemEventContentWithAttachment,
             is TimelineItemAttachmentsContent,
@@ -700,6 +707,32 @@ class MessagesPresenter(
         clipboardHelper.copyPlainText(content) {
             snackbarDispatcher.post(SnackbarMessage(R.string.screen_room_timeline_message_copied))
         }
+    }
+
+    private suspend fun handleSaveAsSticker(event: TimelineItem.Event) {
+        val content = event.content
+        val (width, height) = when (content) {
+            is TimelineItemImageContent -> content.width to content.height
+            is TimelineItemStickerContent -> content.width to content.height
+            else -> return
+        }
+        val attachment = content as TimelineItemEventContentWithAttachment
+        personalStickers.saveImage(
+            source = attachment.mediaSource,
+            label = attachment.filename,
+            info = ImageInfo(
+                width = width?.toLong(),
+                height = height?.toLong(),
+                mimetype = attachment.mimeType,
+                size = attachment.fileSize,
+                thumbnailInfo = null,
+                thumbnailSource = null,
+                blurhash = null,
+            ),
+        ).fold(
+            onSuccess = { snackbarDispatcher.post(SnackbarMessage(R.string.screen_room_sticker_saved)) },
+            onFailure = { snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_error)) },
+        )
     }
 
     private fun handleCopyCaption(event: TimelineItem.Event) {

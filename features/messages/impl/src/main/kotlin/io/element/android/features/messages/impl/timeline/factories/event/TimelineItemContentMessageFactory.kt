@@ -37,6 +37,7 @@ import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.htmlrenderer.api.DocumentNode
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser
+import io.element.android.libraries.htmlrenderer.api.MatrixMathMarkup
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.matrix.api.permalink.PermalinkParser
@@ -100,7 +101,7 @@ class TimelineItemContentMessageFactory(
                     htmlDocument = dom,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
-                    messageTree = parseMessageTree(dom) ?: plainTextMessageTree(emoteBody),
+                    messageTree = parseMessageTree(dom, emoteBody) ?: plainTextMessageTree(emoteBody),
                 )
             }
             is TextMessageType -> {
@@ -113,7 +114,7 @@ class TimelineItemContentMessageFactory(
                     htmlDocument = htmlDocument,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
-                    messageTree = parseMessageTree(htmlDocument) ?: plainTextMessageTree(body),
+                    messageTree = parseMessageTree(htmlDocument, body) ?: plainTextMessageTree(body),
                 )
             }
             is ImageMessageType -> {
@@ -286,7 +287,7 @@ class TimelineItemContentMessageFactory(
                     htmlDocument = htmlDocument,
                     formattedBody = formattedBody,
                     isEdited = content.isEdited,
-                    messageTree = parseMessageTree(htmlDocument) ?: plainTextMessageTree(body),
+                    messageTree = parseMessageTree(htmlDocument, body) ?: plainTextMessageTree(body),
                 )
             }
             is GalleryMessageType -> {
@@ -457,10 +458,11 @@ class TimelineItemContentMessageFactory(
     /**
      * Parse the [document] into a tree of [DocumentNode] for the native Compose renderer, only if the new timeline event renderer is enabled.
      */
-    private suspend fun parseMessageTree(document: Document?): DocumentNode? {
+    private suspend fun parseMessageTree(document: Document?, body: String? = null): DocumentNode? {
         if (document == null) return null
         return if (featureFlagService.isFeatureEnabled(FeatureFlags.NewTimelineEventRenderer)) {
-            htmlMessageParser.parse(document)
+            val formulaDocument = if (body == null) document else MatrixMathMarkup.restoreRichContent(document, body)
+            htmlMessageParser.parse(formulaDocument, allowRawMath = body?.contains("\\$") != true)
         } else {
             null
         }

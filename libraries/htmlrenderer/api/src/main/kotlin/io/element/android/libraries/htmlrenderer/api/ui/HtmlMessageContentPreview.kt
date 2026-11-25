@@ -37,6 +37,8 @@ import io.element.android.libraries.htmlrenderer.api.MentionDisplayNames
 import io.element.android.libraries.htmlrenderer.api.MentionNodeContent
 import io.element.android.libraries.htmlrenderer.api.ParagraphNode
 import io.element.android.libraries.htmlrenderer.api.QuoteNode
+import io.element.android.libraries.htmlrenderer.api.TableNode
+import io.element.android.libraries.htmlrenderer.api.TableRowNode
 import io.element.android.libraries.htmlrenderer.api.spans.InlineCodeSpanStyle
 import io.element.android.libraries.matrix.api.core.EventId
 import io.element.android.libraries.matrix.api.core.RoomAlias
@@ -135,7 +137,21 @@ internal class HtmlMessageContentPreviewParam : PreviewParameterProvider<Documen
             nestedList(),
             nestedListWithComplexContents(),
             linkifiedParagraph(),
+            table(),
         )
+
+    private fun table() = document(
+        TableNode(
+            persistentListOf(
+                TableRowNode(listOf("Remainder", "Order", "Use").map { ParagraphNode(AnnotatedString(it)) }.toImmutableList(), isHeader = true),
+                TableRowNode(
+                    listOf("Peano", "Second order", "Determining the sign near a critical point")
+                        .map { ParagraphNode(AnnotatedString(it)) }.toImmutableList(),
+                    isHeader = false,
+                ),
+            ),
+        ),
+    )
 
     private fun richParagraph() = document(
         paragraph(

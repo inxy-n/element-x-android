@@ -22,6 +22,12 @@ dependencies {
     implementation(projects.libraries.uiStrings)
 
     api(libs.jsoup)
+    implementation("io.github.huarangmeng:latex-renderer:1.7.6")
+    implementation("io.github.huarangmeng:latex-fonts-katex:1.7.6")
+    implementation("org.commonmark:commonmark:0.24.0")
+    implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
+    implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
 
     testCommonDependencies(libs)
 }

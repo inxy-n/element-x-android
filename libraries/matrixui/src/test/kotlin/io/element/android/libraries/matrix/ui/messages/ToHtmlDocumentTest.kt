@@ -21,6 +21,18 @@ import org.junit.Test
 
 class ToHtmlDocumentTest : RobolectricTest() {
     @Test
+    fun `toHtmlDocument preserves a formatted table and math inside its cells`() {
+        val body = FormattedBody(
+            format = MessageFormat.HTML,
+            body = "<table><thead><tr><th>Order</th></tr></thead><tbody><tr>" +
+                "<td><span data-mx-maths='k+1'>k+1</span></td></tr></tbody></table>",
+        )
+        val document = checkNotNull(body.toHtmlDocument(permalinkParser = FakePermalinkParser()))
+        assertThat(document.select("table thead th").single().text()).isEqualTo("Order")
+        assertThat(document.select("table tbody td span[data-mx-maths]").single().attr("data-mx-maths")).isEqualTo("k+1")
+    }
+
+    @Test
     fun `toHtmlDocument - returns null if format is not HTML`() {
         val body = FormattedBody(
             format = MessageFormat.UNKNOWN,

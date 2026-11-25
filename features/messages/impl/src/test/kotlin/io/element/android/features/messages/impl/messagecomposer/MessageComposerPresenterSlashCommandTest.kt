@@ -9,6 +9,8 @@
 
 package io.element.android.features.messages.impl.messagecomposer
 
+import io.element.android.libraries.matrix.test.FakeMatrixClient
+
 import android.net.Uri
 import app.cash.turbine.ReceiveTurbine
 import com.google.common.truth.Truth.assertThat
@@ -302,6 +304,7 @@ class MessageComposerPresenterSlashCommandTest {
             )
         },
         snackbarDispatcher = snackbarDispatcher,
+        personalStickers = PersonalStickerStore(FakeMatrixClient(), testCoroutineDispatchers()),
         analyticsService = analyticsService,
         locationService = locationService,
         messageComposerContext = DefaultMessageComposerContext(),

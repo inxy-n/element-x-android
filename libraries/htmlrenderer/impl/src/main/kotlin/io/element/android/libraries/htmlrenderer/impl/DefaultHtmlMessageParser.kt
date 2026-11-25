@@ -22,11 +22,17 @@ import io.element.android.libraries.htmlrenderer.api.HeaderNode
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser.Companion.INLINE_CODE_ANNOTATION_TAG
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser.Companion.LINK_ANNOTATION_TAG
+import io.element.android.libraries.htmlrenderer.api.INLINE_MATH_ANNOTATION
 import io.element.android.libraries.htmlrenderer.api.ListItemNode
 import io.element.android.libraries.htmlrenderer.api.ListNode
+import io.element.android.libraries.htmlrenderer.api.MathBlockNode
+import io.element.android.libraries.htmlrenderer.api.MatrixMathMarkup
 import io.element.android.libraries.htmlrenderer.api.MentionNodeContent
 import io.element.android.libraries.htmlrenderer.api.ParagraphNode
 import io.element.android.libraries.htmlrenderer.api.QuoteNode
+import io.element.android.libraries.htmlrenderer.api.TableNode
+import io.element.android.libraries.htmlrenderer.api.TableRowNode
+import io.element.android.libraries.htmlrenderer.api.mathInlineContentId
 import io.element.android.libraries.htmlrenderer.api.spans.InlineCodeSpanStyle
 import io.element.android.libraries.matrix.api.permalink.PermalinkBuilder
 import io.element.android.libraries.matrix.api.permalink.PermalinkData
@@ -51,12 +57,14 @@ class DefaultHtmlMessageParser(
     private val permalinkParser: PermalinkParser,
     private val permalinkBuilder: PermalinkBuilder,
 ) : HtmlMessageParser {
-    override fun parse(document: Document): DocumentNode {
+    override fun parse(document: Document, allowRawMath: Boolean): DocumentNode {
+        if (allowRawMath) MatrixMathMarkup.decorateHtml(document)
         return DocumentNode(children = parseBlocks(document.body()))
     }
 
     override fun formatPlainText(text: String): DocumentNode? {
         if (text.isBlank()) return null
+        MatrixMathMarkup.plainTextWithRichContent(text)?.let { return DocumentNode(parseBlocks(it.body())) }
         val pillifiedText = AnnotatedString(text).pillify(emptyMap(), permalinkParser, permalinkBuilder)
         return DocumentNode(children = persistentListOf(ParagraphNode(text = pillifiedText.text, inlineContent = pillifiedText.inlineContent)))
     }
@@ -80,6 +88,10 @@ class DefaultHtmlMessageParser(
             when (node) {
                 // The fallback reply content is never rendered.
                 is Element if node.tagName() == TAG_MX_REPLY -> Unit
+                is Element if node.tagName() in setOf(TAG_P, TAG_DIV) && node.children().any { it.tagName() == TAG_DIV && it.hasAttr(MatrixMathMarkup.ATTRIBUTE) } -> {
+                    flushInline()
+                    blocks.addAll(parseBlocks(node))
+                }
                 is Element if node.isBlockLevel() -> {
                     flushInline()
                     parseBlock(node)?.let(blocks::add)
@@ -93,12 +105,35 @@ class DefaultHtmlMessageParser(
 
     private fun parseBlock(element: Element): BlockNode? = when (val tag = element.tagName()) {
         TAG_P -> buildParagraph(element.childNodes())
+        TAG_DIV -> {
+            val formula = MatrixMathMarkup.safeFormula(element.attr(MatrixMathMarkup.ATTRIBUTE))
+            if (formula == null) buildParagraph(element.childNodes()) else MathBlockNode(formula, element.text().ifBlank { formula })
+        }
         TAG_PRE -> CodeBlockNode(code = element.wholeText().trimEnd('\n'))
         TAG_BLOCKQUOTE -> QuoteNode(children = parseBlocks(element))
         TAG_UL -> buildList(element, ordered = false)
         TAG_OL -> buildList(element, ordered = true)
+        TAG_TABLE -> buildTable(element)
         in HEADER_TAGS -> buildHeader(element, level = tag.removePrefix("h").toInt())
         else -> null
+    }
+
+    private fun buildTable(element: Element): TableNode? {
+        val rows = element.children().flatMap { child ->
+            when (child.normalName()) {
+                "tr" -> listOf(child)
+                "thead", "tbody", "tfoot" -> child.children().filter { it.normalName() == "tr" }
+                else -> emptyList()
+            }
+        }.mapNotNull { row ->
+            val cells = row.children().filter { it.normalName() == "th" || it.normalName() == "td" }
+            if (cells.isEmpty()) return@mapNotNull null
+            TableRowNode(
+                cells = cells.map { buildParagraph(it.childNodes()) ?: ParagraphNode(AnnotatedString("")) }.toImmutableList(),
+                isHeader = row.parent()?.normalName() == "thead" || cells.all { it.normalName() == "th" },
+            )
+        }.toImmutableList()
+        return rows.takeIf { it.isNotEmpty() }?.let(::TableNode)
     }
 
     private fun buildList(element: Element, ordered: Boolean): ListNode {
@@ -147,6 +182,14 @@ class DefaultHtmlMessageParser(
         }
 
         private fun appendElement(element: Element) {
+            if (element.tagName() == "span" || element.tagName() == TAG_DIV) {
+                MatrixMathMarkup.safeFormula(element.attr(MatrixMathMarkup.ATTRIBUTE))?.let { latex ->
+                    val start = builder.length
+                    builder.appendInlineContent(mathInlineContentId(latex), MatrixMathMarkup.inlineSource(latex))
+                    builder.addStringAnnotation(INLINE_MATH_ANNOTATION, latex, start, builder.length)
+                    return
+                }
+            }
             when (element.tagName()) {
                 TAG_BR -> builder.append("\n")
                 TAG_B, TAG_STRONG -> withStyle(SpanStyle(fontWeight = FontWeight.Bold), element)
@@ -247,9 +290,11 @@ private fun Element.isBlockLevel(): Boolean = tagName() in BLOCK_TAGS
 
 private val HEADER_TAGS = setOf("h1", "h2", "h3", "h4", "h5", "h6")
 
-private val BLOCK_TAGS = setOf(TAG_P, TAG_PRE, TAG_BLOCKQUOTE, TAG_UL, TAG_OL) + HEADER_TAGS
+private val BLOCK_TAGS = setOf(TAG_P, TAG_DIV, TAG_PRE, TAG_BLOCKQUOTE, TAG_UL, TAG_OL, TAG_TABLE) + HEADER_TAGS
 
 private const val TAG_P = "p"
+private const val TAG_TABLE = "table"
+private const val TAG_DIV = "div"
 private const val TAG_PRE = "pre"
 private const val TAG_BLOCKQUOTE = "blockquote"
 private const val TAG_UL = "ul"

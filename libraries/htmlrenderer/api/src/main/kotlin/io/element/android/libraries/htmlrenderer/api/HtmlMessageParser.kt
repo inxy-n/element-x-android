@@ -22,7 +22,7 @@ interface HtmlMessageParser {
      * Converts [document] into a [DocumentNode]. Never throws: unknown or empty content
      * yields a [DocumentNode] with no children.
      */
-    fun parse(document: Document): DocumentNode
+    fun parse(document: Document, allowRawMath: Boolean = true): DocumentNode
 
     /**
      * Converts a plain text [String] into a [DocumentNode], applying post-processing like linkification and pillification.

@@ -10,6 +10,9 @@
 
 package io.element.android.features.messages.impl
 
+import io.element.android.features.messages.impl.messagecomposer.PersonalStickerStore
+import io.element.android.libraries.matrix.test.FakeMatrixClient
+
 import androidx.lifecycle.Lifecycle
 import com.google.common.truth.Truth.assertThat
 import im.vector.app.features.analytics.plan.PinUnpinAction
@@ -1627,6 +1630,7 @@ class MessagesPresenterTest {
             roomCallStatePresenter = { aStandByCallState() },
             roomMemberModerationPresenter = roomMemberModerationPresenter,
             snackbarDispatcher = SnackbarDispatcher(),
+            personalStickers = PersonalStickerStore(FakeMatrixClient(), coroutineDispatchers),
             dispatchers = coroutineDispatchers,
             clipboardHelper = clipboardHelper,
             htmlConverterProvider = FakeHtmlConverterProvider(),

@@ -45,7 +45,7 @@ fun FormattedBody.toHtmlDocument(
             // Prepend `@` to mentions
             fixMentions(dom, permalinkParser)
 
-            dom.takeIf { it.text().isNotBlank() }
+            dom.takeIf { it.text().isNotBlank() || it.selectFirst("[data-mx-maths]") != null }
         }
 }
 
@@ -86,6 +86,8 @@ private object HtmlToDomCleaner {
             "pre",
             "blockquote",
             "p",
+            "div",
+            "span",
             "br",
             "h1",
             "h2",
@@ -93,11 +95,20 @@ private object HtmlToDomCleaner {
             "h4",
             "h5",
             "h6",
+            "table",
+            "thead",
+            "tbody",
+            "tfoot",
+            "tr",
+            "th",
+            "td",
             // Add custom `mx-reply` tag, even if it's just to remove its contents from the plain text version of the message
             "mx-reply"
         )
         .addAttributes("a", "href", "data-mention-type", "contenteditable")
         .addAttributes("ol", "start")
+        .addAttributes("span", "data-mx-maths")
+        .addAttributes("div", "data-mx-maths")
 }
 
 /** Custom Html to DOM parser, based on the one included in the rich text editor library. */

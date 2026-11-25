@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_import_stickers">导入贴纸</string>
+    <string name="action_preview_fullscreen">全屏预览</string>
+    <string name="action_save_as_sticker">收藏为贴纸</string>
+    <string name="screen_room_sticker_saved">已收藏贴纸</string>
+</resources>

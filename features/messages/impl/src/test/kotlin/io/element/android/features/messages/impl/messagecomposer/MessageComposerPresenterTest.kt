@@ -10,6 +10,8 @@
 
 package io.element.android.features.messages.impl.messagecomposer
 
+import io.element.android.libraries.matrix.test.FakeMatrixClient
+
 import android.net.Uri
 import androidx.compose.runtime.remember
 import app.cash.molecule.RecompositionMode
@@ -1783,6 +1785,7 @@ class MessageComposerPresenterTest : RobolectricTest() {
             )
         },
         snackbarDispatcher = snackbarDispatcher,
+        personalStickers = PersonalStickerStore(FakeMatrixClient(), testCoroutineDispatchers()),
         analyticsService = analyticsService,
         locationService = locationService,
         messageComposerContext = DefaultMessageComposerContext(),

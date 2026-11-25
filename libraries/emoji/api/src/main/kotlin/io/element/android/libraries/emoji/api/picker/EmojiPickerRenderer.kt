@@ -37,6 +37,7 @@ interface EmojiPickerRenderer {
         selectedEmojis: ImmutableSet<String>,
         modifier: Modifier = Modifier,
         onBackspace: (() -> Unit)? = null,
+        stickerContent: (@Composable () -> Unit)? = null,
         contentDescription: @Composable (Emoji, Boolean) -> String = { emoji, _ -> emoji.unicode },
     )
 }
@@ -49,6 +50,7 @@ object NoOpEmojiPickerRenderer : EmojiPickerRenderer {
         selectedEmojis: ImmutableSet<String>,
         modifier: Modifier,
         onBackspace: (() -> Unit)?,
+        stickerContent: (@Composable () -> Unit)?,
         contentDescription: @Composable (Emoji, Boolean) -> String,
     ) = Unit
 }

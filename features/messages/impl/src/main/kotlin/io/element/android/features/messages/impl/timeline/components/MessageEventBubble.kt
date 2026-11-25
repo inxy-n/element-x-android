@@ -69,6 +69,7 @@ fun MessageEventBubble(
     modifier: Modifier = Modifier,
     customBackgroundColor: Color? = null,
     borderColor: Color? = null,
+    onDoubleClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     val bubbleShape = remember(state) { MessageEventBubbleDefaults.shape(state.cutTopStart, state.groupPosition, state.isMine) }
@@ -143,6 +144,7 @@ fun MessageEventBubble(
                         .toInt()
                         .toDp()
                 )
+                .messageDoubleTap(onDoubleClick)
                 .then(clickableModifier),
             content = content,
         )

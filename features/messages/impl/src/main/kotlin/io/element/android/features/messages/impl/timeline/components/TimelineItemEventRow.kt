@@ -37,10 +37,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +57,7 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import io.element.android.features.messages.impl.R
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.hideFromAccessibility
@@ -98,6 +101,7 @@ import io.element.android.features.messages.impl.timeline.model.event.TimelineIt
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStateContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemStickerContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemTextBasedContent
+import io.element.android.features.messages.impl.timeline.model.event.copyableText
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemTextContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemUnknownContent
 import io.element.android.features.messages.impl.timeline.model.event.TimelineItemVideoContent
@@ -222,6 +226,33 @@ fun TimelineItemEventRow(
 
     // While selecting, the row acts as a selection toggle rather than opening the context menu.
     val isSelectionToggle = selectionData.isSelectionModeActive && selectionData.canBeSelected
+    var showingPreview by remember(event.eventId) { mutableStateOf(false) }
+    val showPreview: () -> Unit = remember(event.eventId) { { showingPreview = true } }
+    val onDoubleClick = showPreview.takeUnless { selectionData.isSelectionModeActive }
+    if (showingPreview) {
+        val textContent = event.content as? TimelineItemTextBasedContent
+        val copyText = remember(textContent) { textContent?.copyableText() }
+        MessageFullScreenPreview(onDismiss = { showingPreview = false }, copyText = copyText) {
+            TimelineItemEventContentView(
+                eventId = event.eventId,
+                content = event.content,
+                timelineProtectionState = timelineProtectionState,
+                onContentClick = {
+                    showingPreview = false
+                    onEventClick()
+                },
+                onGalleryItemClick = {
+                    showingPreview = false
+                    onGalleryItemClick(it)
+                },
+                onLongClick = null,
+                selectableText = true,
+                onLinkClick = onLinkClick,
+                onLinkLongClick = onLinkLongClick,
+                eventSink = eventSink,
+            )
+        }
+    }
     // Selection mode opens a column of [SELECTION_COLUMN_WIDTH] at the start edge for the tick. Both offsets below are derived from this single
     // slide and resolved in the layout phase, so an animation frame moves them together without recomposing the row, and they cannot disagree.
     val selectionProgress = selectionData.progress
@@ -262,11 +293,19 @@ fun TimelineItemEventRow(
         onLongClick = onLongClick,
         onSwipeToReply = onSwipeToReply,
     )
+    val previewAction = if (onDoubleClick == null) {
+        null
+    } else {
+        CustomAccessibilityAction(stringResource(R.string.action_preview_fullscreen)) {
+            onDoubleClick()
+            true
+        }
+    }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .semantics { customActions = accessibilityActions }
+            .semantics { customActions = if (previewAction == null) accessibilityActions else accessibilityActions + previewAction }
     ) {
         if (event.groupPosition.isNew()) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -294,6 +333,7 @@ fun TimelineItemEventRow(
                         timelineRoomInfo = timelineRoomInfo,
                         interactionSource = interactionSource,
                         onContentClick = onContentClick,
+                        onDoubleClick = onDoubleClick,
                         onLongClick = onLongClick,
                         inReplyToClick = ::inReplyToClick,
                         onUserDataClick = ::onUserDataClick,
@@ -331,6 +371,7 @@ fun TimelineItemEventRow(
                 timelineRoomInfo = timelineRoomInfo,
                 interactionSource = interactionSource,
                 onContentClick = onContentClick,
+                onDoubleClick = onDoubleClick,
                 onLongClick = onLongClick,
                 inReplyToClick = ::inReplyToClick,
                 onUserDataClick = ::onUserDataClick,
@@ -537,6 +578,7 @@ private fun TimelineItemEventRowContent(
     timelineRoomInfo: TimelineRoomInfo,
     interactionSource: MutableInteractionSource,
     onContentClick: () -> Unit,
+    onDoubleClick: (() -> Unit)? = null,
     onLongClick: () -> Unit,
     inReplyToClick: () -> Unit,
     onUserDataClick: () -> Unit,
@@ -611,6 +653,7 @@ private fun TimelineItemEventRowContent(
             interactionSource = interactionSource,
             onClick = onContentClick,
             onLongClick = onLongClick,
+            onDoubleClick = onDoubleClick,
             customBackgroundColor = dangerousContentBubbleColor,
             borderColor = borderColor,
         ) {

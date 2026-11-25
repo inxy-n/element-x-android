@@ -20,6 +20,7 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -63,6 +65,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.Placeholder
@@ -90,11 +93,14 @@ import io.element.android.libraries.htmlrenderer.api.DocumentNode
 import io.element.android.libraries.htmlrenderer.api.HeaderNode
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser.Companion.INLINE_CODE_ANNOTATION_TAG
 import io.element.android.libraries.htmlrenderer.api.HtmlMessageParser.Companion.LINK_ANNOTATION_TAG
+import io.element.android.libraries.htmlrenderer.api.INLINE_MATH_ANNOTATION
 import io.element.android.libraries.htmlrenderer.api.ListNode
 import io.element.android.libraries.htmlrenderer.api.LocalMentionDisplayNames
+import io.element.android.libraries.htmlrenderer.api.MathBlockNode
 import io.element.android.libraries.htmlrenderer.api.MentionNodeContent
 import io.element.android.libraries.htmlrenderer.api.ParagraphNode
 import io.element.android.libraries.htmlrenderer.api.QuoteNode
+import io.element.android.libraries.htmlrenderer.api.TableNode
 import io.element.android.libraries.matrix.api.core.UserId
 import io.element.android.libraries.ui.common.layout.ContentAvoidingLayout
 import io.element.android.libraries.ui.common.layout.ContentAvoidingLayoutData
@@ -134,6 +140,7 @@ fun HtmlMessageContent(
     onLinkLongClick: (url: String, text: String) -> Unit = { _, _ -> },
     onMentionClick: (MentionNodeContent) -> Unit = {},
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
+    selectable: Boolean = false,
 ) {
     val measuredParagraph = remember(node) { node.lastBlockNode() }
     val context = remember(
@@ -153,7 +160,13 @@ fun HtmlMessageContent(
             onContentLayoutChange = onContentLayoutChange,
         )
     }
-    BlockNodes(nodes = node.children, context = context, modifier = modifier)
+    if (selectable) {
+        SelectionContainer(modifier = modifier) {
+            BlockNodes(nodes = node.children, context = context)
+        }
+    } else {
+        BlockNodes(nodes = node.children, context = context, modifier = modifier)
+    }
 }
 
 /** Interaction callbacks and state threaded through the render tree. */
@@ -174,6 +187,8 @@ internal fun BlockNode.lastBlockNode(): BlockNode? = when (this) {
     is ListNode -> this
     is QuoteNode -> this
     is CodeBlockNode -> this
+    is MathBlockNode -> this
+    is TableNode -> this
     is HeaderNode -> this
 }
 
@@ -187,7 +202,10 @@ private fun BlockNodes(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(BlockSpacing),
     ) {
-        nodes.forEach { BlockNodeView(node = it, context = context) }
+        nodes.forEach { node ->
+            val blockModifier = if (node is MathBlockNode) Modifier.align(Alignment.CenterHorizontally) else Modifier
+            BlockNodeView(node = node, context = context, modifier = blockModifier)
+        }
     }
 }
 
@@ -208,8 +226,43 @@ private fun BlockNodeView(
         }
         is HeaderNode -> HeaderView(node = node, context = context, modifier = modifier)
         is CodeBlockNode -> CodeBlockView(node = node, modifier = modifier)
+        is MathBlockNode -> MathBlockView(node, modifier)
+        is TableNode -> TableView(node, context, modifier)
         is QuoteNode -> QuoteView(node = node, context = context, modifier = modifier)
         is ListNode -> ListView(node = node, context = context, modifier = modifier)
+    }
+}
+
+@Composable
+private fun TableView(node: TableNode, context: RenderContext, modifier: Modifier = Modifier) {
+    val columnCount = node.rows.maxOf { it.cells.size }
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val cellWidth = (windowWidth * 0.8f / columnCount).coerceIn(112.dp, 232.dp)
+    val borderColor = ElementTheme.colors.borderInteractiveSecondary
+    val borderShape = RoundedCornerShape(8.dp)
+    val backgroundColor = ElementTheme.colors.bgSubtleSecondary
+    Box(modifier.clip(borderShape).border(1.dp, borderColor, borderShape).horizontalScroll(rememberScrollState())) {
+        Column {
+            node.rows.forEachIndexed { rowIndex, row ->
+                if (rowIndex > 0) {
+                    Spacer(Modifier.width(cellWidth * columnCount).height(1.dp).background(borderColor))
+                }
+                Row(
+                    modifier = if (row.isHeader) Modifier.background(backgroundColor) else Modifier,
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    val style = if (row.isHeader) ElementTheme.typography.fontBodyMdMedium else ElementTheme.typography.fontBodyMdRegular
+                    androidx.compose.runtime.CompositionLocalProvider(LocalTextStyle provides style) {
+                        repeat(columnCount) { columnIndex ->
+                            Box(Modifier.width(cellWidth).padding(horizontal = 10.dp, vertical = 8.dp)) {
+                                val cell = row.cells.getOrNull(columnIndex)
+                                if (cell != null) ParagraphView(node = cell, context = context)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -281,19 +334,28 @@ private fun TextBlock(
     }
     val resolvedInlineContent = rememberMentionInlineContent(inlineContent, context)
     val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
-    Text(
-        text = styledText,
-        modifier = modifier
-            .drawInlineCodeBackgrounds(styledText, layoutResult, codeBackgroundColor, codeBorderColor, LocalDensity.current)
-            .linkTapHandler(styledText, layoutResult, context),
-        style = textStyle,
-        color = ElementTheme.colors.textPrimary,
-        inlineContent = resolvedInlineContent,
-        onTextLayout = { result ->
-            layoutResult.value = result
-            onTextLayout(result)
-        },
-    )
+    val renderText: @Composable (Modifier, Dp) -> Unit = { textModifier, availableWidth ->
+        val mathContent = rememberMathInlineContent(text, textStyle.fontSize, availableWidth)
+        Text(
+            text = styledText,
+            modifier = textModifier
+                .drawInlineCodeBackgrounds(styledText, layoutResult, codeBackgroundColor, codeBorderColor, LocalDensity.current)
+                .linkTapHandler(styledText, layoutResult, context),
+            style = textStyle,
+            color = ElementTheme.colors.textPrimary,
+            inlineContent = if (mathContent.isEmpty()) resolvedInlineContent else (resolvedInlineContent + mathContent).toImmutableMap(),
+            onTextLayout = { result ->
+                layoutResult.value = result
+                onTextLayout(result)
+            },
+        )
+    }
+    if (text.hasStringAnnotations(INLINE_MATH_ANNOTATION, 0, text.length)) {
+        // Leave a rounding pixel for the text engine's placeholder measurement.
+        BoxWithConstraints(modifier) { renderText(Modifier, (maxWidth - 1.dp).coerceAtLeast(0.dp)) }
+    } else {
+        renderText(modifier, Dp.Unspecified)
+    }
 }
 
 /** Maps an `<h1>`–`<h6>` [level] to a Compound typography style, largest first. */

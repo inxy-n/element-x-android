@@ -84,6 +84,8 @@ import io.element.android.libraries.push.api.notifications.conversations.Notific
 import io.element.android.libraries.slashcommands.api.SlashCommand
 import io.element.android.libraries.slashcommands.api.SlashCommandService
 import io.element.android.libraries.slashcommands.api.message
+import io.element.android.libraries.htmlrenderer.api.MatrixMathMarkup
+import io.element.android.libraries.ui.strings.CommonStrings
 import io.element.android.libraries.textcomposer.mentions.MentionSpanProvider
 import io.element.android.libraries.textcomposer.mentions.ResolvedSuggestion
 import io.element.android.libraries.textcomposer.model.MarkdownTextEditorState
@@ -153,6 +155,7 @@ class MessageComposerPresenter(
     emojiPickerPresenterFactory: EmojiPickerPresenter.Factory,
     getRecentEmojis: GetRecentEmojis,
     private val addRecentEmoji: AddRecentEmoji,
+    private val personalStickers: PersonalStickerStore,
 ) : Presenter<MessageComposerState> {
     @AssistedFactory
     interface Factory {
@@ -457,6 +460,23 @@ class MessageComposerPresenter(
             isInThreadTimeline = isInThread,
             showAttachmentSourcePicker = showAttachmentSourcePicker,
             emojiPickerState = emojiPickerState,
+            stickerPicker = StickerPickerActions(
+                store = personalStickers,
+                onImport = { resolver, uris ->
+                    sessionCoroutineScope.launch {
+                        personalStickers.importImages(resolver, uris).onFailure {
+                            snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_error))
+                        }
+                    }
+                },
+                onSend = { sticker ->
+                    sessionCoroutineScope.launch {
+                        room.sendSticker(sticker.url, sticker.label, sticker.info, threadRoot).onFailure {
+                            snackbarDispatcher.post(SnackbarMessage(CommonStrings.common_message_failed_to_send))
+                        }
+                    }
+                },
+            ),
             showTextFormatting = showTextFormatting,
             canShareLocation = canShareLocation,
             suggestions = suggestions.toImmutableList(),
@@ -522,13 +542,13 @@ class MessageComposerPresenter(
         richTextEditorState: RichTextEditorState,
         slashCommandAction: MutableState<AsyncAction<Unit>>,
     ) = launch {
-        val message = currentComposerMessage(markdownTextEditorState, richTextEditorState, withMentions = true)
+        val composerMessage = currentComposerMessage(markdownTextEditorState, richTextEditorState, withMentions = true)
         val capturedMode = messageComposerContext.composerMode
 
         val slashCommand = if (capturedMode is MessageComposerMode.Normal) {
             slashCommandService.parse(
-                textMessage = message.markdown,
-                formattedMessage = message.html,
+                textMessage = composerMessage.markdown,
+                formattedMessage = composerMessage.html,
                 isInThreadTimeline = isInThread,
             )
         } else {
@@ -583,6 +603,10 @@ class MessageComposerPresenter(
             }
         }
 
+        val formattedMath = withContext(dispatchers.computation) {
+            MatrixMathMarkup.createFormattedBody(composerMessage.markdown, composerMessage.html)
+        }
+        val message = if (formattedMath == null) composerMessage else composerMessage.copy(html = formattedMath)
         // Reset composer right away
         resetComposer(markdownTextEditorState, richTextEditorState, fromEdit = capturedMode is MessageComposerMode.Edit)
         when (capturedMode) {

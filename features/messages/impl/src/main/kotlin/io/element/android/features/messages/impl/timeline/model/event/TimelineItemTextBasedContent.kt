@@ -10,6 +10,7 @@ package io.element.android.features.messages.impl.timeline.model.event
 
 import androidx.compose.runtime.Immutable
 import io.element.android.libraries.htmlrenderer.api.DocumentNode
+import io.element.android.libraries.htmlrenderer.api.MatrixMathMarkup
 import org.jsoup.nodes.Document
 
 /**
@@ -42,3 +43,5 @@ sealed interface TimelineItemTextBasedContent :
     val htmlBody: String?
         get() = htmlDocument?.body()?.html()
 }
+
+internal fun TimelineItemTextBasedContent.copyableText(): String = MatrixMathMarkup.copyableText(body, htmlDocument)

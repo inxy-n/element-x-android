@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_import_stickers">Import stickers</string>
+    <string name="action_preview_fullscreen">Open full-screen preview</string>
+    <string name="action_save_as_sticker">Save as sticker</string>
+    <string name="screen_room_sticker_saved">Sticker saved</string>
+</resources>

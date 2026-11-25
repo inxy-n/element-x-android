@@ -36,6 +36,22 @@ data class DocumentNode(
     val children: ImmutableList<BlockNode>,
 ) : BlockNode
 
+@Immutable
+data class MathBlockNode(val latex: String, val fallback: String) : BlockNode
+
+@Immutable
+data class TableNode(val rows: ImmutableList<TableRowNode>) : BlockNode
+
+@Immutable
+data class TableRowNode(
+    val cells: ImmutableList<ParagraphNode>,
+    val isHeader: Boolean,
+) : MessageNode
+
+const val INLINE_MATH_ANNOTATION = "matrix.math"
+
+fun mathInlineContentId(latex: String): String = "matrix-math:" + latex
+
 /**
  * A run of inline content (text with inline formatting) already flattened to an
  * [AnnotatedString]. This is the only leaf that carries styled text.

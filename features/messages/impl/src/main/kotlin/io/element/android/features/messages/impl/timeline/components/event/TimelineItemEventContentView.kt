@@ -9,6 +9,7 @@
 package io.element.android.features.messages.impl.timeline.components.event
 
 import android.text.SpannedString
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
@@ -83,6 +84,7 @@ fun TimelineItemEventContentView(
     onLinkLongClick: (Link) -> Unit,
     eventSink: (TimelineEvent.TimelineItemEvent) -> Unit,
     modifier: Modifier = Modifier,
+    selectableText: Boolean = false,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
 ) {
     val hideMediaContent = remember(eventId, timelineProtectionState.protectionState) {
@@ -151,6 +153,7 @@ fun TimelineItemEventContentView(
                     onLinkClick = onLinkClick,
                     onLinkLongClick = onLinkLongClick,
                     onContentLayoutChange = calculatedOnContentLayoutChange,
+                    selectable = selectableText,
                 )
                 is TimelineItemUnknownContent -> TimelineItemUnknownView(
                     content = content,
@@ -270,6 +273,7 @@ fun TimelineItemEventContentView(
                 onLinkClick = onLinkClick,
                 onLinkLongClick = onLinkLongClick,
                 onContentLayoutChange = onContentLayoutChange,
+                selectable = selectableText,
             )
         }
     }
@@ -284,6 +288,7 @@ private fun CaptionView(
     onLinkLongClick: (Link) -> Unit,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit,
     modifier: Modifier = Modifier,
+    selectable: Boolean = false,
 ) {
     // When the new timeline event renderer is enabled and the caption has a parsed tree, render it
     // natively with Compose. Otherwise fall back to the legacy rich text editor view below.
@@ -291,6 +296,7 @@ private fun CaptionView(
         Box(modifier.semantics { contentDescription = caption }) {
             HtmlMessageContent(
                 node = captionTree,
+                selectable = selectable,
                 currentUserId = LocalTimelineEventRendererConfig.current.currentUserId,
                 onLinkClick = { url, text -> onLinkClick(Link(url = url, text = text)) },
                 onLinkLongClick = { url, text -> onLinkLongClick(Link(url = url, text = text)) },
@@ -304,6 +310,14 @@ private fun CaptionView(
                         )
                     )
                 },
+            )
+        }
+    } else if (selectable) {
+        SelectionContainer(modifier = modifier) {
+            androidx.compose.material3.Text(
+                text = caption,
+                style = LocalTextStyle.current,
+                color = ElementTheme.colors.textPrimary,
             )
         }
     } else {

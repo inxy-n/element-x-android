@@ -34,6 +34,13 @@ import kotlinx.coroutines.flow.StateFlow
  * An instance owns SDK resources, in particular [liveTimeline], so it must be closed once no longer needed.
  */
 interface JoinedRoom : BaseRoom {
+    suspend fun sendSticker(
+        url: String,
+        body: String,
+        info: io.element.android.libraries.matrix.api.media.ImageInfo,
+        threadId: io.element.android.libraries.matrix.api.core.ThreadId?,
+    ): Result<Unit>
+
     /**
      * A counter incremented every time a synced event is received on [liveTimeline], so callers can refresh data derived from the room.
      * It carries no meaning beyond "something changed", and is only updated while it has subscribers.

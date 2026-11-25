@@ -57,6 +57,7 @@ import io.element.android.libraries.designsystem.theme.components.Icon
 import io.element.android.libraries.designsystem.theme.components.IconSource
 import io.element.android.libraries.designsystem.theme.components.SearchBar
 import io.element.android.libraries.emoji.impl.R
+import io.element.android.libraries.ui.strings.CommonStrings
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentSetOf
@@ -73,10 +74,12 @@ internal fun EmojiPickerView(
     selectedEmojis: ImmutableSet<String>,
     modifier: Modifier = Modifier,
     onBackspace: (() -> Unit)? = null,
+    stickerContent: (@Composable () -> Unit)? = null,
     contentDescription: @Composable (emoji: Emoji, isSelected: Boolean) -> String = { emoji, _ -> emoji.unicode },
 ) {
     val coroutineScope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(pageCount = { state.categories.size })
+    val hasStickers = stickerContent != null
+    val pagerState = rememberPagerState(pageCount = { state.categories.size + if (hasStickers) 1 else 0 })
     var skinPickerEmoji by remember { mutableStateOf<Emoji?>(null) }
 
     Column(modifier) {
@@ -106,6 +109,16 @@ internal fun EmojiPickerView(
                 selectedTabIndex = pagerState.currentPage,
             ) {
                 state.categories.forEachIndexed { index, category ->
+                    if (hasStickers && index == 1) {
+                        Tab(
+                            icon = {
+                                Icon(CompoundIcons.Sticker(), contentDescription = stringResource(CommonStrings.common_sticker))
+                            },
+                            selected = pagerState.currentPage == 1,
+                            onClick = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
+                        )
+                    }
+                    val page = if (hasStickers && index > 0) index + 1 else index
                     Tab(
                         icon = {
                             when (category.icon) {
@@ -119,9 +132,9 @@ internal fun EmojiPickerView(
                                 )
                             }
                         },
-                        selected = pagerState.currentPage == index,
+                        selected = pagerState.currentPage == page,
                         onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                            coroutineScope.launch { pagerState.animateScrollToPage(page) }
                         }
                     )
                 }
@@ -134,7 +147,11 @@ internal fun EmojiPickerView(
                 state = pagerState,
                 modifier = Modifier.fillMaxWidth(),
             ) { index ->
-                val emojis = state.categories[index].emojis
+                if (index == 1 && stickerContent != null) {
+                    stickerContent()
+                    return@HorizontalPager
+                }
+                val emojis = state.categories[if (hasStickers && index > 1) index - 1 else index].emojis
                 EmojiResults(
                     emojis = emojis,
                     isEmojiSelected = { selectedEmojis.contains(it.unicode) },

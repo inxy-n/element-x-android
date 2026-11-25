@@ -39,13 +39,16 @@ plugins {
     // alias(libs.plugins.gms.google.services)
 }
 
+val forkRelease = providers.gradleProperty("elementx.forkRelease").map(String::toBoolean).getOrElse(false)
+val forkSigningStore = providers.environmentVariable("ELEMENTX_SIGNING_STORE_FILE").orNull
+
 android {
     namespace = "io.element.android.x"
 
     defaultConfig {
         applicationId = BuildTimeConfig.APPLICATION_ID
         targetSdk = Versions.TARGET_SDK
-        versionCode = Versions.VERSION_CODE
+        versionCode = Versions.VERSION_CODE + if (forkRelease) 1 else 0
         versionName = Versions.VERSION_NAME
 
         // Used by the activity-alias ".ElementLinksActivity" in AndroidManifest.xml
@@ -59,7 +62,7 @@ android {
 
         // Keep abiFilter for the universalApk
         ndk {
-            abiFilters += listOf("armeabi-v7a", "x86", "arm64-v8a", "x86_64")
+            abiFilters += if (forkRelease) listOf("arm64-v8a") else listOf("armeabi-v7a", "x86", "arm64-v8a", "x86_64")
         }
 
         // Ref: https://developer.android.com/studio/build/configure-apk-splits.html#configure-abi-split
@@ -69,7 +72,7 @@ android {
                 val buildingAppBundle = gradle.startParameter.taskNames.any { it.contains("bundle") }
 
                 // Enables building multiple APKs per ABI. This should be disabled when building an AAB.
-                isEnable = !buildingAppBundle
+                isEnable = !buildingAppBundle && !forkRelease
 
                 // By default all ABIs are included, so use reset() and include to specify that we only
                 // want APKs for armeabi-v7a, x86, arm64-v8a and x86_64.
@@ -92,10 +95,19 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-            storeFile = file("./signature/debug.keystore")
-            storePassword = "android"
+            if (forkSigningStore == null) {
+                require(!forkRelease) { "The fork release requires ELEMENTX_SIGNING_STORE_FILE and ELEMENTX_SIGNING_PASSWORD." }
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+                storeFile = file("./signature/debug.keystore")
+                storePassword = "android"
+            } else {
+                val password = providers.environmentVariable("ELEMENTX_SIGNING_PASSWORD").get()
+                keyAlias = "elementx-fork"
+                keyPassword = password
+                storeFile = file(forkSigningStore)
+                storePassword = password
+            }
         }
         register("nightly") {
             keyAlias = environmentOrGradleValue("ELEMENT_ANDROID_NIGHTLY_KEYID", "signing.element.nightly.keyId")
@@ -127,11 +139,13 @@ android {
         }
 
         getByName("release") {
+            // Keep the private fork's install identity so it can update the signed test build in place.
+            if (forkRelease) applicationIdSuffix = ".debug"
             resValue("string", "app_name", baseAppName)
             resValue(
                 "string",
                 "login_redirect_scheme",
-                oAuthRedirectSchemeBase,
+                if (forkRelease) "$oAuthRedirectSchemeBase.debug" else oAuthRedirectSchemeBase,
             )
             signingConfig = signingConfigs.getByName("debug")
 

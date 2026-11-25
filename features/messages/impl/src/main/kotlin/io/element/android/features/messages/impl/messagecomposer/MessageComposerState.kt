@@ -32,6 +32,7 @@ data class MessageComposerState(
     val resolveAtRoomMentionDisplay: () -> TextDisplay,
     val slashCommandAction: AsyncAction<Unit>,
     val eventSink: (MessageComposerEvent) -> Unit,
+    val stickerPicker: StickerPickerActions? = null,
 )
 
 sealed interface ComposerEmojiPickerState {

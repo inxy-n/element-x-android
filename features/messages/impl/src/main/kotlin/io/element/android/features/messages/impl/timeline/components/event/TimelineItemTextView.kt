@@ -8,20 +8,27 @@
 
 package io.element.android.features.messages.impl.timeline.components.event
 
+import android.os.Build
 import android.text.SpannedString
+import android.util.TypedValue
+import android.view.textclassifier.TextClassifier
+import android.widget.TextView
 import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
+import androidx.compose.ui.viewinterop.AndroidView
 import io.element.android.compound.theme.ElementTheme
 import io.element.android.features.messages.impl.timeline.LocalTimelineEventRendererConfig
 import io.element.android.features.messages.impl.timeline.model.event.AN_EMOJI_ONLY_TEXT
@@ -34,6 +41,7 @@ import io.element.android.libraries.designsystem.preview.ElementPreview
 import io.element.android.libraries.designsystem.preview.PreviewsDayNight
 import io.element.android.libraries.designsystem.utils.LocalUiTestMode
 import io.element.android.libraries.htmlrenderer.api.MentionNodeContent
+import io.element.android.libraries.htmlrenderer.api.ParagraphNode
 import io.element.android.libraries.htmlrenderer.api.ui.HtmlMessageContent
 import io.element.android.libraries.textcomposer.ElementRichTextEditorStyle
 import io.element.android.libraries.textcomposer.mentions.LocalMentionSpanUpdater
@@ -42,6 +50,7 @@ import io.element.android.libraries.ui.common.layout.ContentAvoidingLayout
 import io.element.android.libraries.ui.common.layout.ContentAvoidingLayoutData
 import io.element.android.wysiwyg.compose.EditorStyledText
 import io.element.android.wysiwyg.link.Link
+import java.util.Locale
 
 @Composable
 fun TimelineItemTextView(
@@ -49,6 +58,7 @@ fun TimelineItemTextView(
     onLinkClick: (Link) -> Unit,
     onLinkLongClick: (Link) -> Unit,
     modifier: Modifier = Modifier,
+    selectable: Boolean = false,
     onContentLayoutChange: (ContentAvoidingLayoutData) -> Unit = {},
 ) {
     // The View <-> Compose interop is not working well with Compose UI tests (it loops indefinitely), so we skip it in the UI test mode.
@@ -57,6 +67,19 @@ fun TimelineItemTextView(
     // When the new timeline event renderer is enabled and the message has a parsed tree, render it
     // natively with Compose. Otherwise fall back to the legacy rich text editor view below.
     val messageTree = content.messageTree
+    val nativePreviewText = remember(content, selectable) {
+        if (!selectable || content.formattedBody.toString() != content.body) return@remember null
+        val unstyled = messageTree?.children?.all { block ->
+            block is ParagraphNode && block.inlineContent.isEmpty() && block.text.spanStyles.isEmpty() &&
+                block.text.getStringAnnotations(0, block.text.length).isEmpty() &&
+                block.text.getLinkAnnotations(0, block.text.length).isEmpty()
+        } ?: (content.htmlDocument == null)
+        content.body.takeIf { unstyled }
+    }
+    if (nativePreviewText != null && !LocalInspectionMode.current) {
+        NativePreviewText(text = nativePreviewText, modifier = modifier)
+        return
+    }
     if (LocalTimelineEventRendererConfig.current.isComposeRendererEnabled && messageTree != null) {
         Box(modifier.semantics { contentDescription = content.plainText }) {
             HtmlMessageContent(
@@ -81,6 +104,7 @@ fun TimelineItemTextView(
                         )
                     )
                 },
+                selectable = selectable,
             )
         }
         return
@@ -94,6 +118,7 @@ fun TimelineItemTextView(
             }
     }
     val textStyle = when {
+        selectable -> LocalTextStyle.current
         emojiOnly -> ElementTheme.typography.fontHeadingXlRegular
         else -> ElementTheme.typography.fontBodyLgRegular
     }
@@ -107,16 +132,50 @@ fun TimelineItemTextView(
                 .semantics { contentDescription = content.plainText }
                 .limitMentionPillWidth(text)
         ) {
-            EditorStyledText(
-                text = text,
-                onLinkClickedListener = onLinkClick,
-                onLinkLongClickedListener = onLinkLongClick,
-                style = ElementRichTextEditorStyle.textStyle(fontScale = LocalTimelineEventRendererConfig.current.fontScale),
-                onTextLayout = ContentAvoidingLayout.measureLegacyLastTextLine(onContentLayoutChange = onContentLayoutChange),
-                releaseOnDetach = false,
-            )
+            if (selectable && !isInPreview) {
+                SelectionContainer {
+                    androidx.compose.material3.Text(
+                        text = content.body,
+                        onTextLayout = ContentAvoidingLayout.measureLastTextLine(onContentLayoutChange = onContentLayoutChange),
+                    )
+                }
+            } else {
+                EditorStyledText(
+                    text = text,
+                    onLinkClickedListener = onLinkClick,
+                    onLinkLongClickedListener = onLinkLongClick,
+                    style = ElementRichTextEditorStyle.textStyle(fontScale = LocalTimelineEventRendererConfig.current.fontScale),
+                    onTextLayout = ContentAvoidingLayout.measureLegacyLastTextLine(onContentLayoutChange = onContentLayoutChange),
+                    releaseOnDetach = false,
+                )
+            }
         }
     }
+}
+
+/** The platform handles word selection and tolerates a small amount of vertical drift when dragging a handle. */
+@Composable
+private fun NativePreviewText(text: String, modifier: Modifier = Modifier) {
+    val style = LocalTextStyle.current
+    val locale = style.localeList?.firstOrNull()?.toLanguageTag()?.let(Locale::forLanguageTag) ?: Locale.getDefault()
+    val color = ElementTheme.colors.textPrimary.toArgb()
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            TextView(context).apply {
+                setTextIsSelectable(true)
+                includeFontPadding = false
+                setLineSpacing(0f, 1.35f)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) setTextClassifier(TextClassifier.NO_OP)
+            }
+        },
+        update = { view ->
+            view.textLocale = locale
+            view.setTextColor(color)
+            view.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (style.fontSize.isSp) style.fontSize.value else 22f)
+            if (view.text.toString() != text) view.text = text
+        },
+    )
 }
 
 @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

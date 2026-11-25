@@ -13,6 +13,7 @@ import io.element.android.libraries.core.coroutine.CoroutineDispatchers
 import io.element.android.libraries.core.coroutine.childScope
 import io.element.android.libraries.core.extensions.mapFailure
 import io.element.android.libraries.core.extensions.runCatchingExceptions
+import org.json.JSONObject
 import io.element.android.libraries.featureflag.api.FeatureFlagService
 import io.element.android.libraries.featureflag.api.FeatureFlags
 import io.element.android.libraries.matrix.api.core.DeviceId
@@ -105,6 +106,33 @@ class JoinedRustRoom(
     private val roomContentForwarder: RoomContentForwarder,
     private val featureFlagService: FeatureFlagService,
 ) : JoinedRoom, BaseRoom by baseRoom {
+
+    override suspend fun sendSticker(
+        url: String,
+        body: String,
+        info: io.element.android.libraries.matrix.api.media.ImageInfo,
+        threadId: io.element.android.libraries.matrix.api.core.ThreadId?,
+    ): Result<Unit> = runCatchingExceptions {
+        require(url.startsWith("mxc://"))
+        val content = JSONObject()
+            .put("url", url)
+            .put("body", body)
+            .put(
+                "info",
+                JSONObject().put("w", info.width).put("h", info.height)
+                    .put("mimetype", info.mimetype).put("size", info.size)
+            )
+        if (threadId != null) {
+            content.put(
+                "m.relates_to",
+                JSONObject().put("rel_type", "m.thread").put("event_id", threadId.value)
+                    .put("is_falling_back", true)
+                    .put("m.in_reply_to", JSONObject().put("event_id", threadId.value))
+            )
+        }
+        innerRoom.sendRaw("m.sticker", content.toString(), null)
+        Unit
+    }
     // Create a dispatcher for all room methods...
     private val roomDispatcher = coroutineDispatchers.io.limitedParallelism(32)
     private val innerRoom = baseRoom.innerRoom

@@ -8,6 +8,9 @@
 
 package io.element.android.libraries.matrix.test.room
 
+import io.element.android.libraries.matrix.api.media.ImageInfo
+import io.element.android.libraries.matrix.api.core.ThreadId
+
 import io.element.android.libraries.core.bool.orFalse
 import io.element.android.libraries.matrix.api.core.DeviceId
 import io.element.android.libraries.matrix.api.core.EventId
@@ -116,6 +119,9 @@ class FakeJoinedRoom(
     ): Result<Unit> = simulateLongTask {
         editMessageLambda(eventId, body, htmlBody, intentionalMentions)
     }
+
+    override suspend fun sendSticker(url: String, body: String, info: ImageInfo, threadId: ThreadId?): Result<Unit> =
+        Result.success(Unit)
 
     override suspend fun typingNotice(isTyping: Boolean): Result<Unit> = simulateLongTask {
         typingNoticeResult(isTyping)

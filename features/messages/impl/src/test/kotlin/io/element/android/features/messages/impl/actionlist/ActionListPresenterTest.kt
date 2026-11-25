@@ -589,6 +589,7 @@ class ActionListPresenterTest {
                     actions = persistentListOf(
                         TimelineItemAction.Reply,
                         TimelineItemAction.Forward,
+                        TimelineItemAction.SaveAsSticker,
                         TimelineItemAction.AddCaption,
                         TimelineItemAction.CopyLink,
                         TimelineItemAction.Pin,
@@ -754,6 +755,7 @@ class ActionListPresenterTest {
                     actions = persistentListOf(
                         TimelineItemAction.Reply,
                         TimelineItemAction.Forward,
+                        TimelineItemAction.SaveAsSticker,
                         TimelineItemAction.EditCaption,
                         TimelineItemAction.CopyLink,
                         TimelineItemAction.Pin,
@@ -804,6 +806,7 @@ class ActionListPresenterTest {
                     actions = persistentListOf(
                         TimelineItemAction.Reply,
                         TimelineItemAction.Forward,
+                        TimelineItemAction.SaveAsSticker,
                         TimelineItemAction.CopyLink,
                         TimelineItemAction.Pin,
                         TimelineItemAction.CopyCaption,
